@@ -1,0 +1,86 @@
+package com.vbforge.exam.support;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.UUID;
+
+/**
+ * Test helper: an isolated, fresh, in-memory H2 database.
+ *
+ * <p>Every {@link #create()} call spins up a DIFFERENT in-memory database (UUID-named),
+ * so tests cannot interfere with each other. Close with {@link #close()} when done —
+ * the in-memory DB is destroyed automatically at that point.
+ *
+ * <p><b>Why {@code DATABASE_TO_LOWER=TRUE}?</b> H2 2.x by default folds unquoted
+ * identifiers to UPPERCASE (SQL-standard behavior). That means a column declared as
+ * {@code id INT} in the DDL is stored and reported as {@code "ID"}. Calls like
+ * {@code rs.getString("id")} still work — the JDBC spec requires case-insensitive
+ * label matching — but {@link java.sql.ResultSetMetaData#getColumnLabel(int)} returns
+ * the stored case, which would be {@code "ID"}. Turning off the folding keeps
+ * identifiers as-written, so both APIs agree.
+ */
+public final class TestDatabase implements AutoCloseable {
+
+    private final Connection connection;
+
+    private TestDatabase(Connection connection) {
+        this.connection = connection;
+    }
+
+    /** Creates a fresh in-memory DB with schema + seed data. */
+    public static TestDatabase create() throws SQLException {
+        return createInternal(true);
+    }
+
+    /** Creates a fresh in-memory DB with schema but no rows — useful for empty-result tests. */
+    public static TestDatabase createEmpty() throws SQLException {
+        return createInternal(false);
+    }
+
+    private static TestDatabase createInternal(boolean seed) throws SQLException {
+        String dbName = "exam_" + UUID.randomUUID().toString().replace("-", "");
+        String url    = "jdbc:h2:mem:" + dbName + ";DATABASE_TO_LOWER=TRUE";
+        Connection conn = DriverManager.getConnection(url, "sa", "");
+        executeScript(conn, readResource("/db/schema.sql"));
+        if (seed) {
+            executeScript(conn, readResource("/db/seed.sql"));
+        }
+        return new TestDatabase(conn);
+    }
+
+    public Connection connection() {
+        return connection;
+    }
+
+    @Override
+    public void close() throws SQLException {
+        connection.close();
+    }
+
+    private static void executeScript(Connection conn, String script) throws SQLException {
+        for (String raw : script.split(";")) {
+            String stmt = raw.trim();
+            if (stmt.isEmpty()) continue;
+            try (Statement st = conn.createStatement()) {
+                st.execute(stmt);
+            }
+        }
+    }
+
+    private static String readResource(String path) {
+        try (InputStream in = TestDatabase.class.getResourceAsStream(path)) {
+            if (in == null) {
+                throw new IllegalStateException("Resource not found on classpath: " + path);
+            }
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+}
