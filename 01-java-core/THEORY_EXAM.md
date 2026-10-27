@@ -7,6 +7,11 @@ Answer in the blank line(s) after each question. No time limit.
 ### 1. What is the difference between primitive types and reference types in Java?
 
 Answer:
+Primitive types store actual values, while reference types store references to objects in memory.
+Reference variables can refer to the same object, whereas primitive variables hold their own values.
+Java passes arguments by value. When a reference is passed to a method, the reference itself is copied, so the method can modify the referenced object's state but cannot change the caller's variable to refer to a different object.
+Primitive types: byte, short, int, long, float, double, char, boolean.
+Reference types: classes, interfaces, arrays, and enums.
 
 ---
 
